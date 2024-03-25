@@ -23,6 +23,13 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"time"
+
+	"github.com/form3tech-oss/jwt-go"
+	rbacmodel "github.com/go-chassis/cari/rbac"
+	"github.com/go-chassis/go-chassis/v2/security/authr"
+	"github.com/go-chassis/go-chassis/v2/server/restful"
+	"github.com/patrickmn/go-cache"
 
 	"github.com/apache/servicecomb-service-center/pkg/log"
 	"github.com/apache/servicecomb-service-center/pkg/plugin"
@@ -32,12 +39,10 @@ import (
 	"github.com/apache/servicecomb-service-center/server/plugin/auth"
 	rbacsvc "github.com/apache/servicecomb-service-center/server/service/rbac"
 	"github.com/apache/servicecomb-service-center/server/service/rbac/token"
-	rbacmodel "github.com/go-chassis/cari/rbac"
-	"github.com/go-chassis/go-chassis/v2/security/authr"
-	"github.com/go-chassis/go-chassis/v2/server/restful"
 )
 
 var ErrNoRoles = errors.New("no role found in token")
+var tokenCache = cache.New(5*time.Minute, 10*time.Minute)
 
 func init() {
 	plugin.RegisterPlugin(plugin.Plugin{Kind: auth.AUTH, Name: "buildin", New: New})
@@ -152,6 +157,14 @@ func (ba *TokenAuthenticator) VerifyToken(req *http.Request) (interface{}, error
 	if v == "" {
 		return nil, rbacmodel.NewError(rbacmodel.ErrNoAuthHeader, "")
 	}
+	claims, ok := tokenCache.Get(v)
+	if ok {
+		if !claims.(jwt.MapClaims).VerifyExpiresAt(time.Now().Unix(), false) {
+			tokenCache.Delete(v)
+		} else {
+			return claims, nil
+		}
+	}
 	s := strings.Split(v, " ")
 	if len(s) != 2 {
 		return nil, rbacmodel.ErrInvalidHeader
@@ -159,6 +172,7 @@ func (ba *TokenAuthenticator) VerifyToken(req *http.Request) (interface{}, error
 	to := s[1]
 
 	claims, err := authr.Authenticate(req.Context(), to)
+	tokenCache.Set(v, claims, 12*60*time.Minute)
 	if err != nil {
 		return nil, err
 	}
@@ -172,12 +186,12 @@ func checkPerm(roleList []string, req *http.Request) ([]map[string]string, error
 	if hasAdmin {
 		return nil, nil
 	}
-	//todo fast check for dev role
+	// todo fast check for dev role
 	targetResource := FromRequest(req)
 	if targetResource == nil {
 		return nil, errors.New("no valid resouce scope")
 	}
-	//TODO add project
+	// TODO add project
 	project := req.URL.Query().Get(":project")
 	return rbacsvc.Allow(req.Context(), project, normalRoles, targetResource)
 }
