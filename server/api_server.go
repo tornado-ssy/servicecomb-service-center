@@ -23,6 +23,8 @@ import (
 	"net"
 	"time"
 
+	"github.com/go-chassis/foundation/gopool"
+
 	"github.com/apache/servicecomb-service-center/pkg/grace"
 	"github.com/apache/servicecomb-service-center/pkg/log"
 	"github.com/apache/servicecomb-service-center/pkg/rest"
@@ -30,7 +32,6 @@ import (
 	"github.com/apache/servicecomb-service-center/server/metrics"
 	rs "github.com/apache/servicecomb-service-center/server/rest"
 	"github.com/apache/servicecomb-service-center/server/service/registry"
-	"github.com/go-chassis/foundation/gopool"
 )
 
 var apiServer *APIServer
@@ -162,4 +163,8 @@ func (s *APIServer) selfUnregister() {
 
 func GetAPIServer() *APIServer {
 	return apiServer
+}
+
+func (s *APIServer) IsClose() bool {
+	return s.isClose
 }
